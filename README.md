@@ -38,7 +38,7 @@ It is intended for both human contributors and LLM-assisted development.
 
 
 ## 2. Directory Architecture (PoC Stage)
-
+```
 reference/
 ├── work_ID-001/
 │   ├── work_ID_work meta.json
@@ -52,7 +52,7 @@ reference/
 │       └── recording_ID-02_recording meta.json
 ├── work_ID-002/
 │   └── ...
-
+```
 
 ## 3. Naming Conventions
 
