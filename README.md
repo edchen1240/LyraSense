@@ -1,7 +1,7 @@
 
-====================
-LyraSense | Real-Time Audio–Lyric Alignment for Live Music Performance
-====================
+# LyraSense
+Real-Time Audio–Lyric Alignment for Live Music Performance
+
 
 
 - Last Updated: 2026-02-15, 09:27
