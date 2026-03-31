@@ -1,0 +1,17 @@
+{
+    "title": "Demo Song",
+    "artist": "LyraSense Demo",
+    "sample_rate": 22050,
+    "feature_hop_length": 512,
+    "lyrics": [
+        {"text": "Welcome to LyraSense",       "start_time": 0.0,  "end_time": 3.0},
+        {"text": "Real-time lyrics tracking",   "start_time": 3.0,  "end_time": 6.0},
+        {"text": "Streaming audio alignment",   "start_time": 6.0,  "end_time": 9.0},
+        {"text": "Music follows perfectly",     "start_time": 9.0,  "end_time": 12.0},
+        {"text": "Low latency, high accuracy",  "start_time": 12.0, "end_time": 15.0},
+        {"text": "Even through the chorus",     "start_time": 15.0, "end_time": 18.0},
+        {"text": "And back again, seamlessly",  "start_time": 18.0, "end_time": 21.0},
+        {"text": "LyraSense never misses",      "start_time": 21.0, "end_time": 24.0}
+    ],
+    "reference_features": null
+}

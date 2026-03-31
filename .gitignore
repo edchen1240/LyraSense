@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+*.whl
+MANIFEST
+
+# Testing
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Audio / data files (large binaries)
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# Precomputed features cache (regeneratable)
+*.npy.cache
