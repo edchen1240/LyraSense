@@ -74,6 +74,7 @@ max_jump_sec            = 5.0  # Maximum allowed jump when re-aligning (seconds)
 #[7] Meata Data Templates
 WORK_META_TEMPLATE = {
     'work_ID':              '',
+    'original_track_id':    '', 
     'work year':            None,
     'canonical title':      '',
     'original artist':      '',
@@ -85,6 +86,7 @@ WORK_META_TEMPLATE = {
     'source':               '',
     'file name':            '',
     'path original audio':  '',
+    'path_lyrics':         '',
 }
 
 RECD_META_TEMPLATE = {
@@ -194,7 +196,8 @@ DIR_SONG_BANK       = r'D:\05_Datasets\05_Song Data\01_Audio Files'
 DIR_REF             = r'D:\05_Datasets\05_Song Data\02_LyraSense Ref'
 
 LIST_COL_WORK_META  = ['Work Year', 'Canonical Title', 'Original Artist', 'Source',
-                       'File Name', 'Language', 'OA Type', 'OS Key', 'RS Key', 'Key Modulation']
+                       'File Name', 'Language', 'OA Type', 'OS Key', 'RS Key', 'Key Modulation',
+                       'track_ID']
 LIST_COL_RECD_META   = ['Release Year', 'Canonical Title', 'Recording Artist', 'Source', 
                        'File Name', 'Language', 'OA Type', 'OS Key', 'RS Key', 'Key Modulation',
                        'original version', 'official source', 'trim music']
@@ -290,6 +293,11 @@ def lookup_df_track_list_by_work_ID(work_ID,
         
         #[4] Use fill_dict_with_single_row_df to extract metadata fields from the matched row.
         output_meta = fill_dict_with_single_row_df(df_original, list_col_needed, work_meta)
+        
+        #[6] Rename 'track_id' to 'original_track_id' to reflect the semantic meaning.
+        if 'track_id' in output_meta:
+            output_meta['original_track_id'] = output_meta.pop('track_id')
+            
     return output_meta
 
 
@@ -526,20 +534,22 @@ def read_audio_file_and_cvt_to_mono(path_audio, cvt_to_mono=True):
 
 
 def add_path_to_audio(  work_or_recd_meta, 
-                        kn_to_fine  = 'file name', 
+                        kn_to_find  = 'file name', 
                         kn_to_add   = 'path original audio', 
                         audio_ext   = 'mp3'):
     """
     Used in work_meta: to add "path original audio" based on "file name".
     Used in recd_meta: to add "path recording audio" based on "file name".
+    kn_to_find: the key to find the file name in the input dict.
+    kn_to_add: the key to add the path in the output dict.
     """
     #[1] Make sure we can get "file name" from work_meta, which is the base name of the original audio file without extension.
-    _file_name = work_or_recd_meta.get(kn_to_fine, "")
+    _file_name = work_or_recd_meta.get(kn_to_find, "")
     if _file_name in ["", None]:
-        raise ValueError(f'\n❌ [Error] Key "{kn_to_fine}" is missing in the work_meta. Cannot determine the path of original audio file without it.')
+        raise ValueError(f'\n❌ [Error] Key "{kn_to_find}" is missing in the work_meta. Cannot determine the path of original audio file without it.')
     
     #[2] Construct the path of original audio file.
-    path_original_audio = f'{os.path.join(DIR_SONG_BANK, _file_name)}.{audio_ext}' if work_or_recd_meta.get(kn_to_fine, "") else None
+    path_original_audio = f'{os.path.join(DIR_SONG_BANK, _file_name)}.{audio_ext}' if work_or_recd_meta.get(kn_to_find, "") else None
     work_or_recd_meta[kn_to_add] = path_original_audio if os.path.exists(path_original_audio) else None
     #[3] Verify audio file existance and report warning if not exist.
     if not os.path.exists(path_original_audio):
@@ -639,12 +649,13 @@ class Full_work_ID_Check:
         self.df_track_list, self.df_track_print = read_track_table(list_col_print)
         
         #[5] Verify work-level content for all work_IDs.
-        self.varify_work_level()
+        self.df_work_check = self.varify_work_level()
+        self.special_warning()
         
         #[6] If there are work_IDs that need update, ask user if they want to update now.
         if len(self.list_work_ID_need_update) > 0:
             text_q2 =   f'\n⚠️ [Warning] The following work_IDs need update:\n{self.list_work_ID_need_update}\n'\
-                        f'Do you want to update them now? (yes/no)'
+                        f'Do you want to update them now? (yes/no)\n'
             if M1F.question_and_if_yes_action(text_q2):
                 self.agreed_to_update = True
                 for i_work_ID in self.list_work_ID_need_update:
@@ -661,10 +672,19 @@ class Full_work_ID_Check:
         if len(self.list_work_ID_need_update) == 0:
             print(f'\n✅ All work_IDs are verified and correct now.')
         else:
+            print(f'\n⚠️ [Warning] After update, the following work_IDs still need update:')
             print(f'-- list_work_ID_processed: {self.list_work_ID_processed}')
             print(f'-- The following work_IDs still need update:\n{self.list_work_ID_need_update}')
             print(f'-- If this keep happening, check WORK_META_TEMPLATE and LIST_COL_WORK_META.')
         
+
+
+    def special_warning(self):
+        # If the w_lyrics_OK column in self.df_work_check contain any False, print a special warning that some lyrics are missing and can only be added manually.
+        if 'w_lyrics_OK' in self.df_work_check.columns \
+            and (self.df_work_check['w_lyrics_OK'] == False).any():
+            print(f'-- Some lyrics are missing. This can only be added manually. Please visit: https://lrclib.net/')
+
 
 
     def varify_work_level(self):
@@ -678,29 +698,36 @@ class Full_work_ID_Check:
         print(f'-- Work folders found in reference directory {len(list_work_folders)}:\n{list_work_folders}')
         
         #[3] Examine each work_ID and check if corresponding folder and work_meta exist and correct.
-        df_work_check = pd.DataFrame(columns=['work_ID', 'work_folder_exist', 'work_meta_exist', 'work_meta_correct'])
+        df_work_check = pd.DataFrame(columns=['work_ID', 'w_folder_exist', 'w_meta_exist', 'w_meta_correct', 'w_lyrics_OK', 'verified'])
         for i_work_ID in list_work_ID:
-            path_work_meta = os.path.join(DIR_REF, i_work_ID, f'{i_work_ID}_work meta.json')
+            
+            #[4] Collect paths.
+            path_work_meta  = os.path.join(DIR_REF, i_work_ID, f'{i_work_ID}_work meta.json')
+            
+            #[5] Check existance and integrity.
             work_folder_exist       = i_work_ID in list_work_folders
             work_meta_exist         = os.path.exists(path_work_meta)
             work_meta_correct       = self.assert_work_meta_integrity(path_work_meta, i_work_ID, False) if work_meta_exist else False
-            work_meta_verified      = work_folder_exist and work_meta_exist and work_meta_correct  
-            #[4] Append the check result for this work_ID to df_work_check.
+            work_lyrics_correct     = self.assert_work_lyrics_integrity(path_work_meta, i_work_ID)
+            work_meta_verified      = work_folder_exist and work_meta_exist and work_meta_correct and work_lyrics_correct
+            
+            #[6] Append the check result for this work_ID to df_work_check.
             df_work_check = df_work_check._append({
                 'work_ID':              i_work_ID,
-                'work_folder_exist':    work_folder_exist,
-                'work_meta_exist':      work_meta_exist,
-                'work_meta_correct':    work_meta_correct,
+                'w_folder_exist':       work_folder_exist,
+                'w_meta_exist':         work_meta_exist,
+                'w_meta_correct':       work_meta_correct,
+                'w_lyrics_OK':          work_lyrics_correct,
                 'verified':             work_meta_verified
             }, ignore_index=True)
             
-            #[5] If anything is missing or incorrect, set self.need_update_work_meta = True to trigger update later.
+            #[7] If anything is missing or incorrect, set self.need_update_work_meta = True to trigger update later.
             if not work_meta_verified:
                 self.need_update_work_meta = True
             
         print(f'\n[verify_work_level] Summary of work-level check:\n'\
                 f'{tabulate(df_convert_bool_to_symbol(df_work_check, "✅"), headers="keys", tablefmt="orgtbl", showindex=False)}\n')
-        #[6] Collect work_IDs that need update for later processing.
+        #[8] Collect work_IDs that need update for later processing.
         self.list_work_ID_need_update = df_work_check[df_work_check['verified'] == False]['work_ID'].tolist()
 
         return df_work_check
@@ -754,6 +781,73 @@ class Full_work_ID_Check:
         
         return True
         
+
+    def assert_work_lyrics_integrity(self, path_work_meta, i_work_ID, step_print=True):
+        """
+        Check if the lyrics file exist and the content is correct. 
+        The lyrics file is inside the track folder of the original version,
+        with file name format "<work_ID>_lyrics.txt".
+        """
+        def _read_the_last_timestamp_in_lyrics(path_lyrics):
+            """
+            Read the last timestamp in the lyrics file and return it as a float in seconds.
+            Assume the timestamp is in the format [mm:ss.xx] at the beginning of a line.
+            """
+            last_timestamp_sec = None
+            with open(path_lyrics, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('[') and ']' in line:
+                        timestamp_str = line.split(']')[0][1:]  # Get the part between [ and ]
+                        try:
+                            mm, ss_xx = timestamp_str.split(':')
+                            ss, xx = ss_xx.split('.')
+                            last_timestamp_sec = int(mm) * 60 + int(ss) + int(xx) / 100
+                        except ValueError:
+                            continue  # If the timestamp format is not correct, skip this line.
+            return last_timestamp_sec
+        
+        
+        print(f'\n[assert_work_lyrics_integrity] Checking lyrics file for work_ID {i_work_ID}...')
+        #[1] Get original_track_id from work_meta to determine the path of lyrics file.
+        work_meta = M1F.read_json_as_dict(path_work_meta) if os.path.exists(path_work_meta) else {}
+        original_track_id = work_meta.get('original_track_id', '')
+        original_recording_ID = original_track_id.split('-')[1] if '-' in original_track_id else None
+        path_original_track = os.path.join(DIR_REF, i_work_ID, original_recording_ID) if original_track_id else None
+        path_lyrics = os.path.join(path_original_track, f'{original_recording_ID}_lyrics.txt') if path_original_track else None
+        
+        #[2] File existance check.
+        if not os.path.exists(path_lyrics):
+            print(f'⚠️ [Warning] Lyrics file not found at {path_lyrics}.')
+            return False
+        if os.path.getsize(path_lyrics) == 0:
+            print(f'⚠️ [Warning] Lyrics file is empty at {path_lyrics}.')
+            return False
+        print(f'✓ Lyrics file exists and is not empty.') if step_print else None
+        
+        
+        #[4] Read the last timestamp and make sure it's about 60%-100% of the total duration of the original audio. 
+        last_timestamp_sec = _read_the_last_timestamp_in_lyrics(path_lyrics)
+        path_recd_meta = os.path.join(DIR_REF, i_work_ID, original_recording_ID, f'{original_recording_ID}_recording meta.json') if path_original_track else None
+        recd_meta = M1F.read_json_as_dict(path_recd_meta) if path_recd_meta else {}
+        a_duration_sec = recd_meta.get('a_duration_sec', None)
+        
+        #[5] Check if both values are available.
+        if a_duration_sec is None or last_timestamp_sec is None:
+            print(f'⚠️ [Warning] Cannot verify lyrics coverage: a_duration_sec={a_duration_sec}, last_timestamp_sec={last_timestamp_sec}.')
+            return False
+        
+        #[6] Check if the last timestamp is 60%-100% of the total duration.
+        coverage_ratio = last_timestamp_sec / a_duration_sec
+        if coverage_ratio < 0.8 or coverage_ratio > 1.0:
+            print(f'⚠️ [Warning] Lyrics coverage is too low ({coverage_ratio:.2%}). Last timestamp is {last_timestamp_sec:.1f}s, but audio duration is {a_duration_sec:.1f}s.')
+            return False
+        
+        print(f'✓ Lyrics coverage is good ({coverage_ratio:.2%} of {a_duration_sec:.1f}s).') if step_print else None
+        return True
+        
+
+
 
 
 
@@ -812,8 +906,6 @@ class Full_track_ID_Check:
             print(f'-- list_track_ID_processed: {self.list_track_ID_processed}')
             print(f'-- The following track_IDs still need update:\n{self.list_track_ID_need_update}')
             print(f'-- If this keep happening, check RECD_META_TEMPLATE and LIST_COL_RECD_META.')
-
-
 
 
 
@@ -995,10 +1087,29 @@ class Full_track_ID_Check:
 
 
 
+# ============================================================
+# [5] Reference Fix and Update - Start
+# ============================================================
+
+
+class WorkLevelContentFixer:
+    """
+    A class to handle fixing and updating work-level content in the reference, such as work_meta and lyrics.
+    Actually, we don't need this.
+    
+    """
+    def __init__(self):
+        pass
 
 
 
 
+
+
+
+# ============================================================
+# [5] Reference Fix and Update - End
+# ============================================================
 
 
 
@@ -1043,21 +1154,13 @@ class NewSongRegistration:
         self.verify_content()
 
 
-
-
     def verify_content(self):
         #[1] Verify work-level and recording-level directories and meta files.
         self.verify_dir_work_level()
         sys.exit('Checking content at recording level ...')
         self.verify_dir_recording_level()
-        
-        
-        
-        
         self.verify_audio_file()
         self.verify_chroma_file()
-
-
 
     
     def verify_dir_work_level(self):
@@ -1088,6 +1191,45 @@ class NewSongRegistration:
             work_meta = self.create_work_meta(auto_save=True)
         self.work_meta = work_meta
 
+
+
+    @staticmethod
+    def additional_work_meta_info(work_meta):
+        """
+        A function to add additional info to work_meta after the initial creation, 
+        such as "original_track_id" based on "track_id", and "path_lyrics"
+        Prepare for future use when we want to add more info to work_meta after the initial creation.
+        """
+        
+        #[1] If "original_track_id" is not in work_meta or is empty, try to fill it with "track_id" if available.
+        if 'original_track_id' not in work_meta or not work_meta['original_track_id']:
+            if 'track_id' in work_meta:
+                work_meta['original_track_id'] = work_meta['track_id']
+        
+        #[2] If "path_lyrics" is not in work_meta or is empty, try to fill it based on "original_track_id".
+        if 'path_lyrics' not in work_meta or not work_meta['path_lyrics']:
+            original_track_id = work_meta.get('original_track_id', '')
+            original_recording_ID = original_track_id.split('-')[1] if '-' in original_track_id else None
+            work_ID = work_meta.get('work_ID', '')
+            path_original_track = os.path.join(DIR_REF, work_ID, original_recording_ID) if original_track_id else None
+            path_lyrics = os.path.join(path_original_track, f'{original_recording_ID}_lyrics.txt') if path_original_track else None
+            work_meta['path_lyrics'] = path_lyrics
+        
+        #[3] If path_lyrics doesn't exist, create an empty lyrics file with expected path and name.
+        if work_meta.get('path_lyrics'):
+            path_lyrics = work_meta['path_lyrics']
+            dir_lyrics = os.path.dirname(path_lyrics)
+            if not os.path.exists(dir_lyrics):
+                os.makedirs(dir_lyrics)
+            if not os.path.exists(path_lyrics):
+                with open(path_lyrics, 'w', encoding='utf-8') as f:
+                    f.write('')  # Create an empty file
+                print(f'☑️ Created empty lyrics file at {path_lyrics}.')
+        
+        return work_meta
+    
+    
+    
     @staticmethod
     def create_work_meta(   work_ID,
                             df_track_list,
@@ -1116,6 +1258,7 @@ class NewSongRegistration:
         work_meta_found = lookup_df_track_list_by_work_ID(work_meta['work_ID'], df_track_list, LIST_COL_WORK_META)        
         work_meta = M1F.add_lookedup_values_to_dict_template(work_meta, work_meta_found)
         work_meta = add_path_to_audio(work_meta, 'file name', 'path original audio')
+        work_meta = NewSongRegistration.additional_work_meta_info(work_meta)
         work_meta = {k: work_meta.get(k, None) for k in WORK_META_TEMPLATE.keys()}  # Reorder.
 
         #[8] Compare with template (only keys, no value) and report missing keys.

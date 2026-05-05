@@ -22,9 +22,13 @@ import LRS_M2_Data as M2D
 
 
 
+#[1] Settings and parameters
+dir_REF     = r'D:\05_Datasets\05_Song Data\02_LyraSense Ref'
 
 
 
+
+#[3] Options and questions.
 df_options = pd.DataFrame({
     'Option': ['A. Full work_ID check', 
                'B. Full track_ID check', 
@@ -45,10 +49,16 @@ q1_ans = M1F.ask_for_input(text_q1, True, False)
 
 
 
+
+#[4] Execute the chosen option.
 if q1_ans.upper() == 'A':
     FWC = M2D.Full_work_ID_Check()
 elif q1_ans.upper() == 'B':
     FTC = M2D.Full_track_ID_Check()
+elif q1_ans.upper() == 'D':
+    track_ID = M1F.ask_for_input(
+        '\nPlease enter the track_ID (work_ID + recording_ID) for the new track to register:\n', False, False) 
+    NSR = M2D.NewSongRegistration(dir_REF, track_ID)
 else:
     raise NotImplementedError(f'Option {q1_ans} is not implemented yet.')
 
