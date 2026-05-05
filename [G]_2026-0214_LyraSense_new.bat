@@ -4,11 +4,28 @@ setlocal EnableDelayedExpansion
 REM ==================================================
 REM SETTINGS
 REM ==================================================
-set "WORKDIR=D:\01_Floor\a_Ed\09_EECS\10_Python\03_Developing"
-set "TARGET_DIR=2026-0214_LyraSense"
+set "WORKDIR=D:\01_Floor\a_Ed\09_EECS\10_Python\03_Developing\2026-0214_LyraSense"
+set "TARGET_DIR=."
 set "REPO_URL=git@github.com:edchen1240/LyraSense.git"
 set "BRANCH=main"
-set "COMMIT_MSG=Auto commit from batch script."
+set "COMMIT_MSG=Auto commit from batch script"
+
+REM ==================================================
+REM PULL STRATEGY - Choose one:
+REM ==================================================
+REM (default)   : git pull with automatic merge if needed
+REM              Use for: Personal projects, auto-sync workflows
+REM              Creates merge commits, handles conflicts gracefully
+REM
+REM --rebase    : Linear history, replay local commits on top of remote
+REM              Use for: Clean linear history, squashing commits
+REM              May fail if branches diverged (requires manual conflict resolution)
+REM
+REM --ff-only   : Only pulls if it's a fast-forward (no conflicts)
+REM              Use for: Strict linear repos, CI/CD pipelines
+REM              Fails if branches diverged (safer for automation)
+REM ==================================================
+set "PULL_STRATEGY="
 REM ==================================================
 
 :MENU
@@ -86,7 +103,7 @@ echo Fetching latest changes...
 git fetch origin || goto :FAIL
 
 echo Pulling updates...
-git pull --ff-only origin %BRANCH% || goto :FAIL
+git pull %PULL_STRATEGY% --allow-unrelated-histories origin %BRANCH% || goto :FAIL
 
 exit /b 0
 
